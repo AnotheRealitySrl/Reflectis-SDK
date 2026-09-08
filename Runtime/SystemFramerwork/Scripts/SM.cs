@@ -54,13 +54,6 @@ namespace Virtuademy.SDK.Core.SystemFramework
         {
             IsReady = false;
 
-            // TEMPORARY BOOT INSTRUMENTATION — remove before merging.
-            // Times every system's Init in both wall-clock and frames. The two
-            // together tell a stall from a wait: 2000 ms spread over 120 frames is
-            // the editor waiting on I/O and staying responsive, 2000 ms inside a
-            // single frame is the main thread blocked.
-            System.Diagnostics.Stopwatch bootWatch = System.Diagnostics.Stopwatch.StartNew();
-
             CurrentSystems = new List<ISystem>();
             for (int i = 0; i < systems.Count; i++)
             {
@@ -72,16 +65,7 @@ namespace Virtuademy.SDK.Core.SystemFramework
                     CurrentSystems.Add(systemInstance);
                     if (system.AutoInitAtStartup)
                     {
-                        long startedAtMs = bootWatch.ElapsedMilliseconds;
-                        int startedAtFrame = Time.frameCount;
-                        Debug.Log($"[BootTiming] → {system.name}");
-
                         _ = await InitSystem(systemInstance, null);
-
-                        long elapsedMs = bootWatch.ElapsedMilliseconds - startedAtMs;
-                        int elapsedFrames = Time.frameCount - startedAtFrame;
-                        Debug.Log($"[BootTiming] ✓ {system.name} — {elapsedMs} ms over {elapsedFrames} frame(s)" +
-                                  (elapsedFrames <= 1 && elapsedMs > 200 ? "  ← BLOCKED THE MAIN THREAD" : string.Empty));
                     }
                 }
                 else
@@ -98,8 +82,6 @@ namespace Virtuademy.SDK.Core.SystemFramework
             //}
 
             IsReady = true;
-
-            Debug.Log($"[BootTiming] all systems ready — {bootWatch.ElapsedMilliseconds} ms total");
 
             OnAllSystemsSetupsDone?.Invoke();
         }
