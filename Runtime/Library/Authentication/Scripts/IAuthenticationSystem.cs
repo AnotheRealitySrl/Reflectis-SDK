@@ -16,18 +16,13 @@ namespace Virtuademy.SDK.Core.Authentication
     /// be declared here. They moved to that interface so the transport can depend on the two
     /// operations it needs rather than on the whole authentication system; this interface still
     /// exposes them, so every existing caller is unaffected.
+    /// <para>
+    /// <see cref="EAuthentication"/> was nested here too, and is now a top-level enum in this
+    /// namespace. It describes a request, not the system that signs one.
+    /// </para>
     /// </remarks>
     public interface IAuthenticationSystem : ISystem, ITokenProvider
     {
-        [Flags]
-        public enum EAuthentication
-        {
-            None = 0,
-            Bearer = 1,
-            Hmac = 2,
-            BearerAndHmac = Bearer | Hmac
-        }
-
         UnityEvent OnAuthenticated { get; }
         UnityEvent OnUnauthenticated { get; }
         UnityEvent<long, string> OnAuthenticationError { get; }

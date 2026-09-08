@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
-using static Virtuademy.SDK.Core.Authentication.IAuthenticationSystem;
+using Virtuademy.SDK.Core.Authentication;
 
 namespace Virtuademy.SDK.Core.ApiSystem
 {

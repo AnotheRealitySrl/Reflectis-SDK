@@ -12,8 +12,6 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
-using static Virtuademy.SDK.Core.Authentication.IAuthenticationSystem;
-
 namespace Virtuademy.SDK.Core.ApiSystem
 {
     public abstract class ApiSystemBase : BaseSystem
