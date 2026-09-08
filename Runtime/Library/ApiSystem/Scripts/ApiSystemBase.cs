@@ -59,16 +59,34 @@ namespace Virtuademy.SDK.Core.ApiSystem
 
         /// <summary>
         /// Canonical platform type of the API this system talks to (<c>Application</c>,
-        /// <c>AI</c>, <c>Realtime</c>, …), used to resolve its base URL from endpoint
-        /// discovery instead of from the build. See ADR 0024 in the meta-repo.
+        /// <c>AI</c>, <c>Realtime</c>, …). The key both platform-resolved sources are looked
+        /// up by: the live resolver (ADR 0024) and the generated endpoint asset (ADR 0025).
         /// </summary>
         /// <remarks>
-        /// Null — the default — opts out and keeps the serialized
-        /// <see cref="AppIdentification.ApiBaseUrl"/>. The system that performs discovery
-        /// must stay opted out: it is the one endpoint that cannot be discovered, since
-        /// it is the one being asked.
+        /// Null — the default — opts out of both and keeps the serialized
+        /// <see cref="AppIdentification.ApiBaseUrl"/>. To opt out of the live resolver alone,
+        /// give a type here and override <see cref="UseRuntimeResolver"/>.
         /// </remarks>
         protected virtual string DiscoveryApiType => null;
+
+        /// <summary>
+        /// Whether this system may ask the live resolver, as opposed to reading only the
+        /// generated asset. False for the system that performs discovery itself.
+        /// </summary>
+        /// <remarks>
+        /// These are two different sources and only one of them is circular, which is the
+        /// whole reason this is a separate switch rather than a second meaning of
+        /// <see cref="DiscoveryApiType"/>. The bootstrap system cannot ask the resolver —
+        /// it *is* the resolver, and at the point it needs its own address the fetch that
+        /// would answer has not happened yet. The generated asset has no such problem: it
+        /// is a file on disk, written at tenant switch, so reading it is not a request.
+        /// <para>
+        /// Conflating the two is what left the bootstrap system as the only one still
+        /// pinned to a URL serialized into the build — and therefore the only one that
+        /// broke outright when that field was blanked, since nothing could refill it.
+        /// </para>
+        /// </remarks>
+        protected virtual bool UseRuntimeResolver => true;
         #endregion
 
         public override async Task Init()
@@ -107,41 +125,38 @@ namespace Virtuademy.SDK.Core.ApiSystem
                 throw new Exception($"{name}: Missing {nameof(HmacCredential.AppSecret)}");
             }
 
-            // Endpoint discovery (ADR 0024): prefer the base URL the platform reports for
-            // this API type over the one serialized into the build, so moving an API to a
-            // new hostname stops requiring a rebuild of the client.
+            // Where this system's base URL comes from. Three sources, in this order, each a
+            // fallback for the one above:
             //
-            // The serialized value is the fallback, and deliberately so: if no resolver is
-            // registered yet — this system initialising before the bootstrap one, or the
-            // platform unreachable — the system behaves exactly as it did before. That
-            // makes the boot order a preference rather than a requirement.
+            //   1. the runtime resolver — the platform, asked live, so a hostname can move
+            //      without a rebuild of the client (ADR 0024). Skipped when UseRuntimeResolver
+            //      is false, which is how the system that performs discovery avoids asking
+            //      itself for an answer it does not have yet.
+            //   2. the generated endpoint asset — what the platform said at the last tenant
+            //      switch: one asset for the whole project instead of a copy serialized into
+            //      every system (ADR 0025). Read through PlatformConfig, which goes via
+            //      Resources so the editor and a player build resolve it identically.
+            //   3. the base URL serialized in this system's own asset — the legacy source, and
+            //      the only one that survives a project that has never run a tenant switch.
             //
-            // A serialized localhost address wins outright: it can only have been set by
-            // someone deliberately pointing this build at an API on their own machine, and
-            // the platform would otherwise answer with the deployed hostname and take it
-            // away. Same rule the web clients apply to their own local override.
-            // Three sources, in this order, and each one is a fallback for the one above:
+            // Falling through all three to the serialized value is a supported outcome, not a
+            // failure: a system that initialises before the bootstrap one, or a build whose
+            // platform is unreachable, behaves exactly as it did before discovery existed.
+            // That is what makes boot order a preference rather than a requirement.
             //
-            //   1. the runtime resolver — the platform, asked live. Still authoritative, so a
-            //      hostname can move without a rebuild (ADR 0024).
-            //   2. the generated endpoint asset — what the platform said at tenant switch, one
-            //      asset for the whole project instead of a copy serialized into each system
-            //      (ADR 0025). Read through PlatformConfig, which uses Resources so the editor and
-            //      the build resolve it the same way.
-            //   3. the base URL serialized in this system's own asset — the legacy source, kept
-            //      until the generated asset is the only one and the stamping is gone.
-            //
-            // A serialized localhost still wins outright over all three: it can only have been set
-            // by someone deliberately pointing this build at an API on their own machine, and both
-            // the platform and the generated asset would otherwise answer with the deployed
-            // hostname and take it away.
+            // A serialized loopback address wins outright over all three. It can only have been
+            // set by someone deliberately aiming this build at a service on their own machine,
+            // and both the platform and the generated asset would otherwise answer with the
+            // deployed hostname and quietly take it away. Same rule the web clients apply to
+            // their own local override.
             if (!string.IsNullOrEmpty(DiscoveryApiType) && !PointsAtLocalhost(apiConfig.ApiBaseUrl))
             {
                 string resolvedBaseUrl = null;
                 string resolvedVersion = null;
                 string resolvedFrom = null;
 
-                if (ApiEndpointResolver.Current != null
+                if (UseRuntimeResolver
+                    && ApiEndpointResolver.Current != null
                     && ApiEndpointResolver.Current.TryGetBaseUrl(DiscoveryApiType, out string discoveredBaseUrl)
                     && !string.IsNullOrEmpty(discoveredBaseUrl))
                 {
