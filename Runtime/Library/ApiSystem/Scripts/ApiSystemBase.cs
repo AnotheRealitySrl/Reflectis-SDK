@@ -96,19 +96,56 @@ namespace Virtuademy.SDK.Core.ApiSystem
             // someone deliberately pointing this build at an API on their own machine, and
             // the platform would otherwise answer with the deployed hostname and take it
             // away. Same rule the web clients apply to their own local override.
-            if (!string.IsNullOrEmpty(DiscoveryApiType)
-                && !PointsAtLocalhost(apiConfig.ApiBaseUrl)
-                && ApiEndpointResolver.Current != null
-                && ApiEndpointResolver.Current.TryGetBaseUrl(DiscoveryApiType, out string discoveredBaseUrl)
-                && !string.IsNullOrEmpty(discoveredBaseUrl))
+            // Three sources, in this order, and each one is a fallback for the one above:
+            //
+            //   1. the runtime resolver — the platform, asked live. Still authoritative, so a
+            //      hostname can move without a rebuild (ADR 0024).
+            //   2. the generated endpoint asset — what the platform said at tenant switch, one
+            //      asset for the whole project instead of a copy serialized into each system
+            //      (ADR 0025). Read through PlatformConfig, which uses Resources so the editor and
+            //      the build resolve it the same way.
+            //   3. the base URL serialized in this system's own asset — the legacy source, kept
+            //      until the generated asset is the only one and the stamping is gone.
+            //
+            // A serialized localhost still wins outright over all three: it can only have been set
+            // by someone deliberately pointing this build at an API on their own machine, and both
+            // the platform and the generated asset would otherwise answer with the deployed
+            // hostname and take it away.
+            if (!string.IsNullOrEmpty(DiscoveryApiType) && !PointsAtLocalhost(apiConfig.ApiBaseUrl))
             {
-                if (!string.Equals(discoveredBaseUrl, apiConfig.ApiBaseUrl, StringComparison.OrdinalIgnoreCase))
+                string resolvedBaseUrl = null;
+                string resolvedVersion = null;
+                string resolvedFrom = null;
+
+                if (ApiEndpointResolver.Current != null
+                    && ApiEndpointResolver.Current.TryGetBaseUrl(DiscoveryApiType, out string discoveredBaseUrl)
+                    && !string.IsNullOrEmpty(discoveredBaseUrl))
                 {
-                    Debug.Log($"{name}: base URL resolved from discovery: {discoveredBaseUrl} " +
-                              $"(the build carried {apiConfig.ApiBaseUrl})");
+                    resolvedBaseUrl = discoveredBaseUrl;
+                    resolvedFrom = "the platform";
+                }
+                else if (PlatformConfig.TryGetEndpoint(DiscoveryApiType, out PlatformEndpoint generated))
+                {
+                    resolvedBaseUrl = generated.BaseUrl;
+                    // Only when the asset has one: a type outside the four TenantConfig carries
+                    // arrives without a version, and overwriting a good serialized value with
+                    // nothing would be a regression.
+                    resolvedVersion = string.IsNullOrEmpty(generated.ApiVersion) ? null : generated.ApiVersion;
+                    resolvedFrom = $"the generated asset ({PlatformConfig.Endpoints.GeneratedFrom})";
                 }
 
-                apiConfig = new AppIdentification(apiConfig.Credential, discoveredBaseUrl, apiConfig.ApiVersion);
+                if (!string.IsNullOrEmpty(resolvedBaseUrl))
+                {
+                    if (!string.Equals(resolvedBaseUrl, apiConfig.ApiBaseUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Debug.Log($"{name}: base URL resolved from {resolvedFrom}: {resolvedBaseUrl} " +
+                                  $"(this system carried {apiConfig.ApiBaseUrl})");
+                    }
+
+                    apiConfig = new AppIdentification(apiConfig.Credential,
+                                                      resolvedBaseUrl,
+                                                      resolvedVersion ?? apiConfig.ApiVersion);
+                }
             }
 
             if (string.IsNullOrEmpty(apiConfig.ApiBaseUrl))
