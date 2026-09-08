@@ -73,7 +73,31 @@ namespace Virtuademy.SDK.Core.ApiSystem
 
         public override async Task Init()
         {
-            if (string.IsNullOrEmpty(apiConfig.Credential.AppId.ToString()))
+            // Credential: the generated asset first, then whatever this system carries (ADR 0025).
+            //
+            // Asset-first rather than the other way round, and the order is the whole point.
+            // Preferring the serialized value would leave every system on the credential the old
+            // tenant-switch stamping wrote into its own asset — so the migration would look done
+            // while nothing had actually moved, and the 18 committed copies would stay live.
+            if (PlatformConfig.Credentials != null && PlatformConfig.Credentials.HasCredential)
+            {
+                HmacCredential generated = PlatformConfig.Credentials.Credential;
+
+                if (apiConfig.Credential == null || apiConfig.Credential.AppId != generated.AppId)
+                {
+                    Debug.Log($"{name}: credential taken from the generated asset (app {generated.AppId})");
+                }
+
+                apiConfig = new AppIdentification(generated, apiConfig.ApiBaseUrl, apiConfig.ApiVersion);
+            }
+
+            if (apiConfig.Credential == null)
+            {
+                throw new Exception($"{name}: no credential — neither a generated {nameof(PlatformCredentials)} " +
+                                    "asset nor one serialized on this system");
+            }
+
+            if (apiConfig.Credential.AppId == Guid.Empty)
             {
                 throw new Exception($"{name}: Missing {nameof(HmacCredential.AppId)}");
             }
