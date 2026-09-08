@@ -8,17 +8,22 @@ namespace Virtuademy.SDK.Core.Authentication
     /// Supplies and refreshes the bearer tokens an API client signs its calls with.
     /// </summary>
     /// <remarks>
-    /// Split out of <see cref="IAuthenticationSystem"/> so that the transport can ask for a
+    /// Split out of <c>IAuthenticationSystem</c> so that the transport can ask for a
     /// token without depending on the thing that authenticates a user. The transport needs two
     /// operations; the authentication system has those plus session loading, sign-in events and
     /// a Unity lifecycle, none of which a client making an HTTP call has any business knowing
     /// about.
     /// <para>
-    /// This is the seam the step-5 refactor turns into constructor injection: once
-    /// <c>ApiSystemBase</c> is a plain instantiable client rather than a
-    /// <c>ScriptableObject</c> system, the provider arrives as an argument instead of being
-    /// looked up. <see cref="IAuthenticationSystem"/> derives from this interface, so the one
-    /// implementation satisfies it already and nothing has to be rewired to adopt it.
+    /// It is also what let this assembly stop referencing the one that holds the system
+    /// framework: with tokens described by an interface that lives here, nothing in this
+    /// assembly has to name <c>IAuthenticationSystem</c> — which is a system, and stayed with
+    /// the framework. <c>IAuthenticationSystem</c> derives from this interface, so the one
+    /// implementation already satisfies it and nothing had to be rewired.
+    /// </para>
+    /// <para>
+    /// Any future instantiable client in this assembly takes one of these as a constructor
+    /// argument. <c>ApiSystemBase</c> cannot — it is a <c>ScriptableObject</c>, so it exposes a
+    /// settable property and resolves the framework's implementation into it.
     /// </para>
     /// </remarks>
     public interface ITokenProvider

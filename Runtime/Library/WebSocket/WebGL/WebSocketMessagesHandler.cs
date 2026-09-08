@@ -1,5 +1,4 @@
 #if UNITY_WEBGL && !UNITY_EDITOR
-using Virtuademy.SDK.Core.SystemFramework;
 using Virtuademy.SDK.Core.Utilities;
 
 using System;
@@ -28,8 +27,6 @@ public class WebSocketMessagesHandler : Singleton<WebSocketMessagesHandler>
     [DllImport("__Internal")]
     private static extern void WebSocketClose(int channel);
 
-    private WebSocketSystem webSocketSystem;
-
     private Dictionary<int, WebGLWebSocketHandler> handlers = new Dictionary<int, WebGLWebSocketHandler>();
 
     private Dictionary<int, WebGLWebSocketHandler> openingChannels = new Dictionary<int, WebGLWebSocketHandler>();
@@ -39,7 +36,6 @@ public class WebSocketMessagesHandler : Singleton<WebSocketMessagesHandler>
     protected override void Awake()
     {
         base.Awake();
-        webSocketSystem = SM.GetSystem<WebSocketSystem>();
         gameObject.name = WEB_SOCKET_HANDLER_OBJ_NAME;
         WebSocketInit(WEB_SOCKET_HANDLER_OBJ_NAME);
     }

@@ -19,9 +19,17 @@ using Virtuademy.SDK.Core.Authentication;
 namespace Virtuademy.SDK.Core.ApiSystem
 {
     /// <summary>
-    /// Static helper for building authenticated API requests.
-    /// Replaces the instance-based ApiSystemBase with static methods.
+    /// Builds authenticated API requests. Static, and self-contained: a credential, a base URL
+    /// and an endpoint are all it needs.
     /// </summary>
+    /// <remarks>
+    /// This is the whole transport, which makes it the API surface of this assembly for anyone
+    /// outside the Unity system framework — an external app or a creator's editor tooling can
+    /// call <see cref="BuildRequest"/>, <see cref="IsAlive"/> and <see cref="GetApiInfo"/>
+    /// directly, with no bootstrap of any kind. <c>ApiSystemBase</c> is a convenience over
+    /// these three, holding the configuration as a serialized asset and resolving a token
+    /// provider; it is a system, and lives with the framework rather than here.
+    /// </remarks>
     public static class ApiHelper
     {
         public static (string timestamp, string hmac) CalculateHmacHeader(HmacCredential credential, DateTime timestamp)

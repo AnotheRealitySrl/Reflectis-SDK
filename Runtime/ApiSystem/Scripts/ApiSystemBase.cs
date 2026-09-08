@@ -290,19 +290,36 @@ namespace Virtuademy.SDK.Core.ApiSystem
 
             if (JwtToken == null)
             {
-                SetToken();
+                TrySetToken();
             }
 
-            if (JwtToken.IsExpired(serverTimeOffset))
+            // A missing token and an expired one need the same thing, so they take the same
+            // branch. Testing only for expiry used to dereference a null token: the first call
+            // of a session reaches here with nothing cached, TrySetToken swallowed the
+            // "no tokens available" it got back, and the very next line asked that null whether
+            // it had expired. The logged error was therefore followed by a NullReference that
+            // hid it.
+            if (JwtToken == null || JwtToken.IsExpired(serverTimeOffset))
             {
-                Debug.LogWarning($"[{name}]: JWT token is null or expired. Refreshing token for API label: {ApiLabel}");
+                Debug.LogWarning($"[{name}]: JWT token is missing or expired. Refreshing token for API label: {ApiLabel}");
 
                 await tokenProvider.GetTokens();
 
-                SetToken();
+                TrySetToken();
             }
 
-            void SetToken()
+            if (JwtToken == null)
+            {
+                Debug.LogError($"[{name}]: no token for API label '{ApiLabel}' even after a refresh. " +
+                               "The request will be sent without a bearer header and will most " +
+                               "likely come back 401.");
+            }
+
+            // Reports rather than throws, which is the behaviour the original catch intended:
+            // a caller that cannot get a token still sends its request and takes the 401. The
+            // difference is that the reason now survives to the log instead of being buried by
+            // the crash on the line after.
+            void TrySetToken()
             {
                 try
                 {
@@ -310,8 +327,7 @@ namespace Virtuademy.SDK.Core.ApiSystem
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[{name}]: Failed to retrieve JWT token for API label: {ApiLabel}. Exception: {ex.Message}");
-                    return;
+                    Debug.LogWarning($"[{name}]: no JWT token held for API label '{ApiLabel}' yet: {ex.Message}");
                 }
             }
         }

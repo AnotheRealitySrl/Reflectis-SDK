@@ -1,6 +1,5 @@
 ﻿using Virtuademy.SDK.Core.SystemFramework;
 
-using System;
 using System.Threading.Tasks;
 
 using UnityEngine.Events;

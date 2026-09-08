@@ -7,7 +7,7 @@ namespace Virtuademy.SDK.Core.Authentication
     /// so the combination is a real option rather than a convenience.
     /// </summary>
     /// <remarks>
-    /// This used to be nested inside <see cref="IAuthenticationSystem"/>, which meant every file
+    /// This used to be nested inside <c>IAuthenticationSystem</c>, which meant every file
     /// that only wanted to name an auth mode had to import the authentication system — through a
     /// <c>using static</c> on an interface, at that. It is a property of a request, not of the
     /// system that signs one, and the nesting was the only thing tying the transport to an

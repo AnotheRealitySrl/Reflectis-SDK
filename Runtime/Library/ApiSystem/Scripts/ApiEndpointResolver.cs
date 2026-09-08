@@ -21,8 +21,8 @@ namespace Virtuademy.SDK.Core.ApiSystem
     /// A static hand-off rather than a direct reference because the system that performs
     /// discovery lives in <c>Virtuademy-SDK-TenantConfiguration</c>, which already depends
     /// on this assembly: referencing it back would be circular. The bootstrap system
-    /// registers itself here once its fetch lands, and <see cref="ApiSystemBase"/> reads
-    /// it without knowing who provided it.
+    /// registers itself here once its fetch lands, and <c>ApiSystemBase</c> reads it
+    /// without knowing who provided it.
     /// <para>
     /// <see cref="Current"/> is null until then, and staying null is a supported state:
     /// every consumer falls back to the base URL serialized in its own configuration, so
