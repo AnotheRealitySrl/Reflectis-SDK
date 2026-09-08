@@ -1,5 +1,4 @@
 ﻿using Virtuademy.SDK.Core.SystemFramework;
-using Virtuademy.SDK.Core.Utilities;
 
 using System;
 using System.Threading.Tasks;
@@ -8,7 +7,17 @@ using UnityEngine.Events;
 
 namespace Virtuademy.SDK.Core.Authentication
 {
-    public interface IAuthenticationSystem : ISystem
+    /// <summary>
+    /// The user-facing authentication surface: sign-in state, session loading, and — through
+    /// <see cref="ITokenProvider"/> — the tokens API clients sign with.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ITokenProvider.FindToken"/> and <see cref="ITokenProvider.GetTokens"/> used to
+    /// be declared here. They moved to that interface so the transport can depend on the two
+    /// operations it needs rather than on the whole authentication system; this interface still
+    /// exposes them, so every existing caller is unaffected.
+    /// </remarks>
+    public interface IAuthenticationSystem : ISystem, ITokenProvider
     {
         [Flags]
         public enum EAuthentication
@@ -23,8 +32,6 @@ namespace Virtuademy.SDK.Core.Authentication
         UnityEvent OnUnauthenticated { get; }
         UnityEvent<long, string> OnAuthenticationError { get; }
 
-        JwtToken FindToken(string apiLabel);
-        Task GetTokens();
         Task ReloadSession(string sessionHash);
     }
 }

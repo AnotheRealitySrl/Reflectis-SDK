@@ -41,6 +41,20 @@ namespace Virtuademy.SDK.Core.ApiSystem
         public JwtToken JwtToken { get; set; }
         public TimeSpan ServerTimeOffset { get => serverTimeOffset; set => serverTimeOffset = value; }
 
+        /// <summary>
+        /// Where this client gets its bearer tokens. Left null it falls back to resolving the
+        /// authentication system through the framework, which is what every caller relies on
+        /// today.
+        /// </summary>
+        /// <remarks>
+        /// Settable rather than constructor-injected because this type is still a
+        /// <c>ScriptableObject</c>, which has no usable constructor. That is the only reason —
+        /// the parameter it becomes is the point of the refactor, and this property exists so
+        /// the call site in <see cref="ValidateJwtToken"/> already reads the way it will read
+        /// afterwards.
+        /// </remarks>
+        public ITokenProvider Tokens { get; set; }
+
         public string ApiLabel { get; private set; }
 
         /// <summary>
@@ -266,7 +280,15 @@ namespace Virtuademy.SDK.Core.ApiSystem
 
         protected virtual async Task ValidateJwtToken()
         {
-            IAuthenticationSystem authenticationSystem = SM.GetSystem<IAuthenticationSystem>();
+            // Injected provider first, the framework lookup as the fallback.
+            //
+            // This is the only ambient dependency in this class, and the property is the seam
+            // that removes it: when this type becomes a plain instantiable client the provider
+            // arrives as a constructor argument and the fallback below goes with it, leaving
+            // the class declaration as the last thing here that names the framework at all.
+            // Preferring the injected one now means that switch changes nothing about how this
+            // method behaves.
+            ITokenProvider tokenProvider = Tokens ?? SM.GetSystem<IAuthenticationSystem>();
 
             if (JwtToken == null)
             {
@@ -277,7 +299,7 @@ namespace Virtuademy.SDK.Core.ApiSystem
             {
                 Debug.LogWarning($"[{name}]: JWT token is null or expired. Refreshing token for API label: {ApiLabel}");
 
-                await authenticationSystem.GetTokens();
+                await tokenProvider.GetTokens();
 
                 SetToken();
             }
@@ -286,7 +308,7 @@ namespace Virtuademy.SDK.Core.ApiSystem
             {
                 try
                 {
-                    JwtToken = authenticationSystem.FindToken(ApiLabel);
+                    JwtToken = tokenProvider.FindToken(ApiLabel);
                 }
                 catch (Exception ex)
                 {
