@@ -115,12 +115,25 @@ namespace Virtuademy.SDK.Core.SystemFramework
         /// <summary>
         /// Get an instantiated system of type T/>
         /// </summary>
+        /// <remarks>
+        /// <b>The constraint is <c>class</c> and not <c>ISystem</c> on purpose.</b> The lookup has
+        /// always been "the registered instance assignable to T", and an instance is assignable to a
+        /// contract whether or not that contract happens to derive from <see cref="ISystem"/>. The
+        /// authoring package's contracts deliberately do not: a world is authored against interfaces
+        /// that say what a thing does, not against the framework that hosts them. Requiring
+        /// <c>ISystem</c> here would have forced the framework back into every one of them.
+        /// <para>
+        /// The looser constraint means <c>GetSystem&lt;Something&gt;()</c> for a type nothing
+        /// registers now compiles and returns null, where it used to be a compile error. That is the
+        /// price, and it is the same failure a wrong-but-legal type argument always had.
+        /// </para>
+        /// </remarks>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public static T GetSystem<T>() where T : ISystem
+        public static T GetSystem<T>() where T : class
         {
             ISystem returnSystem = CurrentSystems.Find(s => s.GetType() == typeof(T) || typeof(T).IsAssignableFrom(s.GetType()));
-            return (T)returnSystem;
+            return returnSystem as T;
         }
         /// <summary>
         /// Get an instantiated system of type T/>
