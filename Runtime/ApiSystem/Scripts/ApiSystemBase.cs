@@ -230,9 +230,42 @@ namespace Virtuademy.SDK.Core.ApiSystem
             }
         }
 
+        /// <summary>
+        /// Initialises with a configuration the caller supplies, overriding what this system
+        /// carries — except for a loopback address, which is kept.
+        /// </summary>
+        /// <remarks>
+        /// <b>Why the loopback exception is here and not only in <see cref="Init()"/>.</b> The app
+        /// stamps all four API systems through this overload at boot, from the live tenant config.
+        /// Assigning unconditionally meant a developer's local override was written into the asset,
+        /// read by nothing, and replaced with the deployed hostname before resolution even started
+        /// — so the switcher that writes those addresses, and the loopback rule the resolution
+        /// documents, were both inert for every system the app initialises. The address survived
+        /// only for the bootstrap system, which is initialised without a configuration and was
+        /// therefore the one case anybody had tested.
+        /// <para>
+        /// The credential still comes from the caller: pointing at a service on this machine is a
+        /// statement about *where*, not about *who*.
+        /// </para>
+        /// </remarks>
         public async Task Init(AppIdentification config)
         {
-            apiConfig = config ?? throw new ArgumentException($"{this}: Missing AppConfig", nameof(AppIdentification));
+            if (config == null)
+            {
+                throw new ArgumentException($"{this}: Missing AppConfig", nameof(AppIdentification));
+            }
+
+            if (PointsAtLocalhost(apiConfig?.ApiBaseUrl))
+            {
+                Debug.Log($"{name}: keeping the local address {apiConfig.ApiBaseUrl} instead of the " +
+                          $"supplied {config.ApiBaseUrl} — a loopback address is a deliberate override.");
+
+                apiConfig = new AppIdentification(config.Credential, apiConfig.ApiBaseUrl, apiConfig.ApiVersion);
+            }
+            else
+            {
+                apiConfig = config;
+            }
 
             await Init();
         }
