@@ -3,7 +3,8 @@
     "rootNamespace": "Virtuademy.SDK.Core.Editor",
     "references": [
         "GUID:ab59f74e483e1ee4595bfefea56493f2",
-        "GUID:d5647bb6580a4a92a6e0f29c3a9707fa"
+        "GUID:d5647bb6580a4a92a6e0f29c3a9707fa",
+        "GUID:0401032c0dd84f8da3259c0534d8d9c2"
     ],
     "includePlatforms": [
         "Editor"
