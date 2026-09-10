@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-
 using Virtuademy.SDK.Core.Authentication;
 using Virtuademy.SDK.Core.SystemFramework;
 using Virtuademy.SDK.Core.Utilities;
@@ -14,6 +12,32 @@ using UnityEngine.Networking;
 
 namespace Virtuademy.SDK.Core.ApiSystem
 {
+    /// <summary>
+    /// A platform API client that is also a framework system.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The client behaviour is <see cref="ApiClientBase"/>'s and lives there. This class holds
+    /// only what a <c>ScriptableObject</c> adds to it — the serialized configuration, the asset
+    /// name as a label, and the framework it can reach — and forwards the rest to an owned
+    /// instance.
+    /// </para>
+    /// <para>
+    /// <b>Why the forwarding is worth its awkwardness.</b> Until now this file and
+    /// <c>ApiClientBase</c> were the same three hundred and eighty lines twice over, and they
+    /// had already drifted: the token-provider fallback below was replaced by a throw in the
+    /// copy, a difference in behaviour no reader of either file could see. One implementation
+    /// cannot drift from itself.
+    /// </para>
+    /// <para>
+    /// <b>How the virtual members still work.</b> The owned client is a private subclass that
+    /// overrides each of them to call back into this system, so a subclass overriding
+    /// <see cref="DiscoveryApiType"/> or <see cref="ValidateJwtToken"/> is obeyed by the
+    /// client's own <c>Init</c> and <c>BuildRequest</c> exactly as before. The defaults here
+    /// reach the real implementations through <c>base</c> calls the nested class exposes, so
+    /// nothing recurses.
+    /// </para>
+    /// </remarks>
     public abstract class ApiSystemBase : BaseSystem
     {
         #region Inspector info
@@ -31,48 +55,43 @@ namespace Virtuademy.SDK.Core.ApiSystem
         #region Private info
         // Runtime state (not serialized, populated by the static API class)
         protected TimeSpan serverTimeOffset;
+
+        private Client client;
+
+        /// <summary>
+        /// The client half of this system. Built on first use rather than in a constructor,
+        /// which a <c>ScriptableObject</c> does not usefully have.
+        /// </summary>
+        private Client Api => client ??= new Client(this);
         #endregion
 
         #region Properties
         public AppIdentification ApiConfig { get => apiConfig; set => apiConfig = value; }
 
-        public JwtToken JwtToken { get; set; }
+        public JwtToken JwtToken { get => Api.JwtToken; set => Api.JwtToken = value; }
+
         public TimeSpan ServerTimeOffset { get => serverTimeOffset; set => serverTimeOffset = value; }
 
         /// <summary>
-        /// Where this client gets its bearer tokens. Left null it falls back to resolving the
-        /// authentication system through the framework, which is what every caller relies on
-        /// today.
+        /// Where this client gets its bearer tokens. Left null — which it is everywhere today —
+        /// <see cref="ValidateJwtToken"/> resolves the authentication system through the
+        /// framework instead.
         /// </summary>
         /// <remarks>
-        /// Settable rather than constructor-injected because this type is still a
-        /// <c>ScriptableObject</c>, which has no usable constructor. That is the only reason —
-        /// the parameter it becomes is the point of the refactor, and this property exists so
-        /// the call site in <see cref="ValidateJwtToken"/> already reads the way it will read
-        /// afterwards.
+        /// Settable rather than constructor-injected because this type is a
+        /// <c>ScriptableObject</c>, which has no usable constructor. The framework fallback
+        /// lives in this class and not in <see cref="ApiClientBase"/> on purpose: naming
+        /// <c>SM</c> is the one thing a system can do and a plain client cannot.
         /// </remarks>
         public ITokenProvider Tokens { get; set; }
 
-        public string ApiLabel { get; private set; }
-
-        /// <summary>
-        /// True when the address points at the machine running this build, in which case
-        /// endpoint discovery must not replace it — see <see cref="Init"/>.
-        /// </summary>
-        private static bool PointsAtLocalhost(string url)
-        {
-            if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri parsed))
-            {
-                return false;
-            }
-
-            return parsed.IsLoopback;
-        }
+        public string ApiLabel => Api.ApiLabel;
 
         /// <summary>
         /// Canonical platform type of the API this system talks to (<c>Application</c>,
-        /// <c>AI</c>, <c>Realtime</c>, …). The key both platform-resolved sources are looked
-        /// up by: the live resolver (ADR 0024) and the generated endpoint asset (ADR 0025).
+        /// <c>Profile</c>, <c>Realtime</c>, <c>Configuration</c>…) — the key its address is
+        /// looked up by: the live resolver (ADR 0024) and the generated endpoint asset
+        /// (ADR 0025).
         /// </summary>
         /// <remarks>
         /// Null — the default — opts out of both and keeps the serialized
@@ -86,191 +105,24 @@ namespace Virtuademy.SDK.Core.ApiSystem
         /// generated asset. False for the system that performs discovery itself.
         /// </summary>
         /// <remarks>
-        /// These are two different sources and only one of them is circular, which is the
-        /// whole reason this is a separate switch rather than a second meaning of
-        /// <see cref="DiscoveryApiType"/>. The bootstrap system cannot ask the resolver —
-        /// it *is* the resolver, and at the point it needs its own address the fetch that
-        /// would answer has not happened yet. The generated asset has no such problem: it
-        /// is a file on disk, written at tenant switch, so reading it is not a request.
-        /// <para>
-        /// Conflating the two is what left the bootstrap system as the only one still
-        /// pinned to a URL serialized into the build — and therefore the only one that
-        /// broke outright when that field was blanked, since nothing could refill it.
-        /// </para>
+        /// These are two different sources and only one of them is circular. The bootstrap
+        /// system cannot ask the resolver — it <i>is</i> the resolver, and at the point it needs
+        /// its own address the fetch that would answer has not happened yet. The generated asset
+        /// has no such problem: it is a file on disk, written at tenant switch, so reading it is
+        /// not a request.
         /// </remarks>
         protected virtual bool UseRuntimeResolver => true;
         #endregion
 
-        public override async Task Init()
-        {
-            // Credential: the generated asset first, then whatever this system carries (ADR 0025).
-            //
-            // Asset-first rather than the other way round, and the order is the whole point.
-            // Preferring the serialized value would leave every system on the credential the old
-            // tenant-switch stamping wrote into its own asset — so the migration would look done
-            // while nothing had actually moved, and the 18 committed copies would stay live.
-            if (PlatformConfig.Credentials != null && PlatformConfig.Credentials.HasCredential)
-            {
-                HmacCredential generated = PlatformConfig.Credentials.Credential;
-
-                if (apiConfig.Credential == null || apiConfig.Credential.AppId != generated.AppId)
-                {
-                    Debug.Log($"{name}: credential taken from the generated asset (app {generated.AppId})");
-                }
-
-                apiConfig = new AppIdentification(generated, apiConfig.ApiBaseUrl, apiConfig.ApiVersion);
-            }
-
-            if (apiConfig.Credential == null)
-            {
-                throw new Exception($"{name}: no credential — neither a generated {nameof(PlatformCredentials)} " +
-                                    "asset nor one serialized on this system");
-            }
-
-            if (apiConfig.Credential.AppId == Guid.Empty)
-            {
-                throw new Exception($"{name}: Missing {nameof(HmacCredential.AppId)}");
-            }
-
-            if (string.IsNullOrEmpty(apiConfig.Credential.AppSecret))
-            {
-                throw new Exception($"{name}: Missing {nameof(HmacCredential.AppSecret)}");
-            }
-
-            // Where this system's base URL comes from. Three sources, in this order, each a
-            // fallback for the one above:
-            //
-            //   1. the runtime resolver — the platform, asked live, so a hostname can move
-            //      without a rebuild of the client (ADR 0024). Skipped when UseRuntimeResolver
-            //      is false, which is how the system that performs discovery avoids asking
-            //      itself for an answer it does not have yet.
-            //   2. the generated endpoint asset — what the platform said at the last tenant
-            //      switch: one asset for the whole project instead of a copy serialized into
-            //      every system (ADR 0025). Read through PlatformConfig, which goes via
-            //      Resources so the editor and a player build resolve it identically.
-            //   3. the base URL serialized in this system's own asset — the legacy source, and
-            //      the only one that survives a project that has never run a tenant switch.
-            //
-            // Falling through all three to the serialized value is a supported outcome, not a
-            // failure: a system that initialises before the bootstrap one, or a build whose
-            // platform is unreachable, behaves exactly as it did before discovery existed.
-            // That is what makes boot order a preference rather than a requirement.
-            //
-            // A serialized loopback address wins outright over all three. It can only have been
-            // set by someone deliberately aiming this build at a service on their own machine,
-            // and both the platform and the generated asset would otherwise answer with the
-            // deployed hostname and quietly take it away. Same rule the web clients apply to
-            // their own local override.
-            if (!string.IsNullOrEmpty(DiscoveryApiType) && !PointsAtLocalhost(apiConfig.ApiBaseUrl))
-            {
-                string resolvedBaseUrl = null;
-                string resolvedVersion = null;
-                string resolvedFrom = null;
-
-                if (UseRuntimeResolver
-                    && ApiEndpointResolver.Current != null
-                    && ApiEndpointResolver.Current.TryGetBaseUrl(DiscoveryApiType, out string discoveredBaseUrl)
-                    && !string.IsNullOrEmpty(discoveredBaseUrl))
-                {
-                    resolvedBaseUrl = discoveredBaseUrl;
-                    resolvedFrom = "the platform";
-                }
-                else if (PlatformConfig.TryGetEndpoint(DiscoveryApiType, out PlatformEndpoint generated))
-                {
-                    resolvedBaseUrl = generated.BaseUrl;
-                    // Only when the asset has one: a type outside the four TenantConfig carries
-                    // arrives without a version, and overwriting a good serialized value with
-                    // nothing would be a regression.
-                    resolvedVersion = string.IsNullOrEmpty(generated.ApiVersion) ? null : generated.ApiVersion;
-                    resolvedFrom = $"the generated asset ({PlatformConfig.Endpoints.GeneratedFrom})";
-                }
-
-                if (!string.IsNullOrEmpty(resolvedBaseUrl))
-                {
-                    if (!string.Equals(resolvedBaseUrl, apiConfig.ApiBaseUrl, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Debug.Log($"{name}: base URL resolved from {resolvedFrom}: {resolvedBaseUrl} " +
-                                  $"(this system carried {apiConfig.ApiBaseUrl})");
-                    }
-
-                    apiConfig = new AppIdentification(apiConfig.Credential,
-                                                      resolvedBaseUrl,
-                                                      resolvedVersion ?? apiConfig.ApiVersion);
-                }
-            }
-
-            if (string.IsNullOrEmpty(apiConfig.ApiBaseUrl))
-            {
-                throw new Exception($"{name}: Missing {nameof(AppIdentification.ApiBaseUrl)}");
-            }
-
-            if (checkIsAlive)
-            {
-                if (!await ApiHelper.IsAlive(apiConfig, !allowUntrustedServers))
-                {
-                    throw new Exception($"{name}: API is not alive");
-                }
-            }
-
-            if (getApiInfo)
-            {
-                ApiResponse<ApiInfo> apiInfoReq = await ApiHelper.GetApiInfo(apiConfig, !allowUntrustedServers);
-                if (apiInfoReq.IsSuccess)
-                {
-                    ApiInfo apiInfo = apiInfoReq.Content;
-                    Debug.Log($"{name}: API Server Info: {JsonConvert.SerializeObject(apiInfo)}");
-
-                    ApiLabel = apiInfo.Label;
-                    serverTimeOffset = DateTime.UtcNow - apiInfo.ServerTime;
-                }
-                else
-                {
-                    throw new Exception($"{name}: Failed to get API info: {apiInfoReq.StatusCode} {apiInfoReq.ReasonPhrase}");
-                }
-            }
-        }
+        public override Task Init() => Api.Init();
 
         /// <summary>
         /// Initialises with a configuration the caller supplies, overriding what this system
         /// carries — except for a loopback address, which is kept.
         /// </summary>
-        /// <remarks>
-        /// <b>Why the loopback exception is here and not only in <see cref="Init()"/>.</b> The app
-        /// stamps all four API systems through this overload at boot, from the live tenant config.
-        /// Assigning unconditionally meant a developer's local override was written into the asset,
-        /// read by nothing, and replaced with the deployed hostname before resolution even started
-        /// — so the switcher that writes those addresses, and the loopback rule the resolution
-        /// documents, were both inert for every system the app initialises. The address survived
-        /// only for the bootstrap system, which is initialised without a configuration and was
-        /// therefore the one case anybody had tested.
-        /// <para>
-        /// The credential still comes from the caller: pointing at a service on this machine is a
-        /// statement about *where*, not about *who*.
-        /// </para>
-        /// </remarks>
-        public async Task Init(AppIdentification config)
-        {
-            if (config == null)
-            {
-                throw new ArgumentException($"{this}: Missing AppConfig", nameof(AppIdentification));
-            }
+        public Task Init(AppIdentification config) => Api.Init(config);
 
-            if (PointsAtLocalhost(apiConfig?.ApiBaseUrl))
-            {
-                Debug.Log($"{name}: keeping the local address {apiConfig.ApiBaseUrl} instead of the " +
-                          $"supplied {config.ApiBaseUrl} — a loopback address is a deliberate override.");
-
-                apiConfig = new AppIdentification(config.Credential, apiConfig.ApiBaseUrl, apiConfig.ApiVersion);
-            }
-            else
-            {
-                apiConfig = config;
-            }
-
-            await Init();
-        }
-
-        protected virtual async Task<UnityWebRequest> BuildRequest(
+        protected virtual Task<UnityWebRequest> BuildRequest(
                                                 string method,
                                                 string endpoint,
                                                 Dictionary<string, string> queryParams = null,
@@ -279,100 +131,87 @@ namespace Virtuademy.SDK.Core.ApiSystem
                                                 EAuthentication authentication = EAuthentication.BearerAndHmac,
                                                 bool allowEmptyQueryValues = false,
                                                 Dictionary<string, string> additionalHeaders = null)
-        {
-            if (authentication.HasFlag(EAuthentication.Bearer))
-            {
-                await ValidateJwtToken();
-            }
-
-            return ApiHelper.BuildRequest(
-                method, endpoint, apiConfig,
-                queryParams,
-                requestBodyType,
-                body,
-                authentication,
-                allowEmptyQueryValues,
-                additionalHeaders,
-                jwtToken: JwtToken,
-                serverTimeOffset: serverTimeOffset,
-                allowUntrustedServers: allowUntrustedServers);
-        }
+            => Api.Request(method, endpoint, queryParams, requestBodyType, body,
+                           authentication, allowEmptyQueryValues, additionalHeaders);
 
         protected virtual Dictionary<string, string> SetDefaultHeaders(params string[] values)
-        {
-            Dictionary<string, string> headers = new()
-            {
-                { "AppId", apiConfig.Credential.AppId.ToString() },
-                { "Timestamp", values[0] },
-            };
+            => Api.DefaultHeaders(values);
 
-            return headers;
+        protected virtual Task ValidateJwtToken()
+        {
+            // The framework lookup, and the reason this member is overridden at the system
+            // layer at all: ApiClientBase cannot reach SM, and throws when handed no provider.
+            Api.Tokens = Tokens ?? SM.GetSystem<IAuthenticationSystem>();
+
+            return Api.ValidateToken();
         }
 
-        protected virtual async Task ValidateJwtToken()
+        public Task<bool> IsAlive() => Api.IsAlive();
+
+        public void SetApiConfig(AppIdentification config) => apiConfig = config;
+
+        /// <summary>
+        /// The client, wired so that every virtual member resolves against the system rather
+        /// than against itself.
+        /// </summary>
+        /// <remarks>
+        /// <c>apiConfig</c> and <c>serverTimeOffset</c> are windows onto the system's own
+        /// storage, not copies, and that matters for more than tidiness: one subclass assigns
+        /// <c>apiConfig</c> <i>after</i> awaiting <c>base.Init()</c>, and against a copy that
+        /// write would be invisible to every request the client went on to build.
+        /// </remarks>
+        private sealed class Client : ApiClientBase
         {
-            // Injected provider first, the framework lookup as the fallback.
-            //
-            // This is the only ambient dependency in this class, and the property is the seam
-            // that removes it: when this type becomes a plain instantiable client the provider
-            // arrives as a constructor argument and the fallback below goes with it, leaving
-            // the class declaration as the last thing here that names the framework at all.
-            // Preferring the injected one now means that switch changes nothing about how this
-            // method behaves.
-            ITokenProvider tokenProvider = Tokens ?? SM.GetSystem<IAuthenticationSystem>();
+            private readonly ApiSystemBase owner;
 
-            if (JwtToken == null)
+            public Client(ApiSystemBase owner)
             {
-                TrySetToken();
+                this.owner = owner;
+
+                Label = owner.name;
+                checkIsAlive = owner.checkIsAlive;
+                getApiInfo = owner.getApiInfo;
+                allowUntrustedServers = owner.allowUntrustedServers;
             }
 
-            // A missing token and an expired one need the same thing, so they take the same
-            // branch. Testing only for expiry used to dereference a null token: the first call
-            // of a session reaches here with nothing cached, TrySetToken swallowed the
-            // "no tokens available" it got back, and the very next line asked that null whether
-            // it had expired. The logged error was therefore followed by a NullReference that
-            // hid it.
-            if (JwtToken == null || JwtToken.IsExpired(serverTimeOffset))
+            protected override AppIdentification apiConfig
             {
-                Debug.LogWarning($"[{name}]: JWT token is missing or expired. Refreshing token for API label: {ApiLabel}");
-
-                await tokenProvider.GetTokens();
-
-                TrySetToken();
+                get => owner.apiConfig;
+                set => owner.apiConfig = value;
             }
 
-            if (JwtToken == null)
+            protected override TimeSpan serverTimeOffset
             {
-                Debug.LogError($"[{name}]: no token for API label '{ApiLabel}' even after a refresh. " +
-                               "The request will be sent without a bearer header and will most " +
-                               "likely come back 401.");
+                get => owner.serverTimeOffset;
+                set => owner.serverTimeOffset = value;
             }
 
-            // Reports rather than throws, which is the behaviour the original catch intended:
-            // a caller that cannot get a token still sends its request and takes the 401. The
-            // difference is that the reason now survives to the log instead of being buried by
-            // the crash on the line after.
-            void TrySetToken()
-            {
-                try
-                {
-                    JwtToken = tokenProvider.FindToken(ApiLabel);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[{name}]: no JWT token held for API label '{ApiLabel}' yet: {ex.Message}");
-                }
-            }
-        }
+            protected override string DiscoveryApiType => owner.DiscoveryApiType;
 
-        public async Task<bool> IsAlive()
-        {
-            return await ApiHelper.IsAlive(apiConfig, !allowUntrustedServers);
-        }
+            protected override bool UseRuntimeResolver => owner.UseRuntimeResolver;
 
-        public void SetApiConfig(AppIdentification config)
-        {
-            apiConfig = config;
+            protected override Task ValidateJwtToken() => owner.ValidateJwtToken();
+
+            protected override Dictionary<string, string> SetDefaultHeaders(params string[] values)
+                => owner.SetDefaultHeaders(values);
+
+            // The three below reach ApiClientBase's own implementations, which is what this
+            // system's default overrides forward to. Without them the pair above would recurse.
+            public Task ValidateToken() => base.ValidateJwtToken();
+
+            public Dictionary<string, string> DefaultHeaders(params string[] values)
+                => base.SetDefaultHeaders(values);
+
+            public Task<UnityWebRequest> Request(string method,
+                                                 string endpoint,
+                                                 Dictionary<string, string> queryParams,
+                                                 HttpHelper.ERequestBodyType requestBodyType,
+                                                 object body,
+                                                 EAuthentication authentication,
+                                                 bool allowEmptyQueryValues,
+                                                 Dictionary<string, string> additionalHeaders)
+                => base.BuildRequest(method, endpoint, queryParams, requestBodyType, body,
+                                     authentication, allowEmptyQueryValues, additionalHeaders);
         }
     }
 }
