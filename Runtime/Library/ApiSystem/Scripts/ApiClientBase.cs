@@ -13,9 +13,9 @@ using UnityEngine.Networking;
 
 namespace Virtuademy.SDK.Core.ApiSystem
 {
-    public class PlatformClientBase
+    public class ApiClientBase
     {
-        public PlatformClientBase() => Label = GetType().Name;
+        public ApiClientBase() => Label = GetType().Name;
 
         #region Inspector info
         protected AppIdentification apiConfig;
