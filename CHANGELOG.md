@@ -17,7 +17,7 @@
   **Namespaces are untouched.** The types still declare `Virtuademy.SDK.Core.*`, and no file in this
   package declares `Virtuademy.SystemCore`. The asmdefs were edited field by field rather than by
   substitution, because in three of them the assembly name and the root namespace are the same string.
-- The `displayName` is now `Virtuademy SystemCore`.
+- The `displayName` is now `Virtuademy-SystemCore`, hyphenated like every sibling package.
 - The player layer now follows mesh display, so avatar interactions can be enabled and disabled coherently.
 
 ### Note
