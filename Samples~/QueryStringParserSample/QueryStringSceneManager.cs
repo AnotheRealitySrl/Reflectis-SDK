@@ -6,7 +6,7 @@ using Virtuademy.SDK.Core.ApplicationManagement.Samples;
 using Virtuademy.SDK.Core.SystemFramework;
 using Virtuademy.SDK.Core.Utilities;
 using Virtuademy.SDK.Http;
-using Virtuademy.SDK.PlatformApi;
+using Virtuademy.SDK.ApiData;
 
 using System;
 using System.Collections.Generic;

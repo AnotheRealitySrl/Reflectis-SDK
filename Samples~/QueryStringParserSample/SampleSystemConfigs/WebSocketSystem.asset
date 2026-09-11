@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 340d70b7770a9b44fa655fac55b3a511, type: 3}
   m_Name: WebSocketSystem
-  m_EditorClassIdentifier: Virtuademy.SDK.Core::WebSocketSystem
+  m_EditorClassIdentifier: Virtuademy.SystemCore::WebSocketSystem
   _subSystems: []
   autoInitAtStartup: 1
   secureConnection: 1

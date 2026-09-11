@@ -1,5 +1,5 @@
 {
-    "name": "Virtuademy.SDK.Core.Editor",
+    "name": "Virtuademy.SystemCore.Editor",
     "rootNamespace": "Virtuademy.SDK.Core.Editor",
     "references": [
         "GUID:ab59f74e483e1ee4595bfefea56493f2",

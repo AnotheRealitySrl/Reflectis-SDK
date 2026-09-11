@@ -1,8 +1,8 @@
 {
-    "name": "Virtuademy.SDK.Core.I2Loc",
+    "name": "Virtuademy.SystemCore.I2Loc",
     "rootNamespace": "Virtuademy.SDK.Core",
     "references": [
-        "Virtuademy.SDK.Core",
+        "Virtuademy.SystemCore",
         "I2.Loc"
     ],
     "includePlatforms": [],

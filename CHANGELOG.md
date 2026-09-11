@@ -8,6 +8,16 @@
 - `ICharacterControllerSystem` gained members for the camera and layer work above.
 
 ### Changed
+- **Renamed.** The package id becomes `com.anotherealitysrl.virtuademy-systemcore` and the three
+  assemblies become `Virtuademy.SystemCore`, `.Editor` and `.I2Loc`. The name `Virtuademy.SDK.Core`
+  went to the contracts package in the same wave, which is why the two moves are one change: for
+  one commit the old and the new name would collide. This package is the application framework —
+  systems, managers, UI kit — and is on its way to being private, so it takes the name that says so.
+
+  **Namespaces are untouched.** The types still declare `Virtuademy.SDK.Core.*`, and no file in this
+  package declares `Virtuademy.SystemCore`. The asmdefs were edited field by field rather than by
+  substitution, because in three of them the assembly name and the root namespace are the same string.
+- The `displayName` is now `Virtuademy SystemCore`.
 - The player layer now follows mesh display, so avatar interactions can be enabled and disabled coherently.
 
 ### Note

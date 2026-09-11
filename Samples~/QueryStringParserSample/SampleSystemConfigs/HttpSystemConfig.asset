@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d806b7704cbd28d48b6579cac175a71b, type: 3}
   m_Name: HttpSystemConfig
-  m_EditorClassIdentifier: Virtuademy.SDK.Core::HttpSystem
+  m_EditorClassIdentifier: Virtuademy.SystemCore::HttpSystem
   _subSystems: []
   autoInitAtStartup: 1
   secureConnection: 1

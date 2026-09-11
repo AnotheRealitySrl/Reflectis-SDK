@@ -3137,7 +3137,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 98960c69261151f45b6abe213b9b480a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Virtuademy.SDK.Core::Virtuademy.SDK.Core.ApplicationManagement.Samples.QueryStringParser
+  m_EditorClassIdentifier: Virtuademy.SystemCore::Virtuademy.SDK.Core.ApplicationManagement.Samples.QueryStringParser
 --- !u!114 &2005385352
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3149,7 +3149,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 799843d45ccd57441a2e7900b6a832b6, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Virtuademy.SDK.Core::Virtuademy.SDK.Core.SystemFramework.SystemsManagerController
+  m_EditorClassIdentifier: Virtuademy.SystemCore::Virtuademy.SDK.Core.SystemFramework.SystemsManagerController
   loadOnAwake: 1
   systems:
   - {fileID: 11400000, guid: 583db5b473e63654e9bd3e941ce8d919, type: 2}
